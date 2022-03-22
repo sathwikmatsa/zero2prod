@@ -41,6 +41,15 @@ impl DatabaseSettings {
         } else {
             PgSslMode::Prefer
         };
+
+        tracing::info!(
+            "[DB Settings] host: {}, port: {}, username: {}, password: {}",
+            self.host,
+            self.port,
+            self.username,
+            self.database_name
+        );
+
         PgConnectOptions::new()
             .host(&self.host)
             .port(self.port)
