@@ -1,11 +1,10 @@
 # builder stage
 FROM rust:1.59.0 AS builder
 WORKDIR /app
+RUN apt update && apt install lld clang -y
 COPY . .
-COPY configuration configuration
 ENV SQLX_OFFLINE true
-# Build our application, leveraging the cac
-RUN cargo install --path .
+RUN cargo build --release --bin zero2prod
 
 # runtime stage
 FROM debian:bullseye-slim AS runtime
