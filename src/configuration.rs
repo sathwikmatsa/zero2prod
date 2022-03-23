@@ -4,20 +4,20 @@ use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::ConnectOptions;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Settings {
     pub application: ApplicationSettings,
     pub database: DatabaseSettings,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: Secret<String>,
@@ -42,14 +42,6 @@ impl DatabaseSettings {
             PgSslMode::Prefer
         };
 
-        tracing::info!(
-            "[DB Settings] host: {}, port: {}, username: {}, password: {}",
-            self.host,
-            self.port,
-            self.username,
-            self.database_name
-        );
-
         PgConnectOptions::new()
             .host(&self.host)
             .port(self.port)
@@ -62,29 +54,25 @@ impl DatabaseSettings {
 pub fn get_configuration() -> Result<Settings, config::ConfigError> {
     let base_path = std::env::current_dir().expect("Failed to determine the current directory");
     let configuration_directory = base_path.join("configuration");
-
-    // load base config
-    let builder = config::Config::builder()
-        .add_source(config::File::from(configuration_directory.join("base")).required(true));
-
     let environment: Environment = std::env::var("APP_ENVIRONMENT")
         .unwrap_or_else(|_| "local".into())
         .try_into()
         .expect("Failed to parse APP_ENVIRONMENT.");
 
-    // load specific config based on runtime environment
-    let builder = builder.add_source(
-        config::File::from(configuration_directory.join(environment.as_str())).required(true),
-    );
+    tracing::info!("Run mode: {:?}", environment);
 
-    // load config from environment variables
-    // eg: `APP_APPLICATION__PORT=5001 would set `Settings.application.port`
-    let builder = builder.add_source(config::Environment::with_prefix("app").separator("__"));
+    let builder = config::Config::builder()
+        .add_source(config::File::from(configuration_directory.join("base")).required(true))
+        .add_source(
+            config::File::from(configuration_directory.join(environment.as_str())).required(true),
+        )
+        .add_source(config::Environment::with_prefix("app").separator("__"));
 
     let config = builder.build()?;
     config.try_deserialize()
 }
 
+#[derive(Debug)]
 enum Environment {
     Local,
     Production,
