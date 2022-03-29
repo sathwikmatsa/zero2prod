@@ -12,6 +12,36 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
 }
 
 #[tokio::test]
+async fn confirmations_with_ill_formatted_token_are_rejected_with_a_400() {
+    let app = spawn_app().await;
+    let test_cases = vec![
+        (
+            "gvArhlFk7gcmgBSfXxBeDO0nVsad",
+            "greater than fixed token length",
+        ),
+        (
+            "gvArhlFk7g,mgBSfXxBe#O0nV",
+            "containing non alpha-numeric characters",
+        ),
+        ("gvArhlFkmBfxBeO0nV", "shorter than fixed token length"),
+    ];
+    for (invalid_token, error_message) in test_cases {
+        let response = reqwest::get(&format!(
+            "{}/subscriptions/confirm?subscription_token={}",
+            app.address, invalid_token
+        ))
+        .await
+        .unwrap();
+        assert_eq!(
+            response.status().as_u16(),
+            400,
+            "The API did not fail with 400 when the payload was {}.",
+            error_message
+        );
+    }
+}
+
+#[tokio::test]
 async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     let app = spawn_app().await;
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";

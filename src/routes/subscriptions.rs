@@ -1,23 +1,14 @@
+use crate::domain::subscription_token::SubscriptionToken;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
 use actix_web::{post, web, HttpResponse};
 use chrono::Utc;
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
 use reqwest::Url;
 use serde::Deserialize;
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
-
-fn generate_subscription_token() -> String {
-    let mut rng = thread_rng();
-    std::iter::repeat_with(|| rng.sample(Alphanumeric))
-        .map(char::from)
-        .take(25)
-        .collect()
-}
 
 #[derive(Deserialize)]
 pub struct FormData {
@@ -64,7 +55,7 @@ pub async fn subscription(
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
 
-    let subscription_token = generate_subscription_token();
+    let subscription_token = SubscriptionToken::new();
     if store_token(&mut transaction, subscriber_id, &subscription_token)
         .await
         .is_err()
@@ -93,12 +84,12 @@ pub async fn subscription(
 pub async fn store_token(
     transaction: &mut Transaction<'_, Postgres>,
     subscriber_id: Uuid,
-    subscription_token: &str,
+    subscription_token: &SubscriptionToken,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"INSERT INTO subscription_tokens (subscription_token, subscriber_id)
         VALUES ($1, $2)"#,
-        subscription_token,
+        subscription_token.as_ref(),
         subscriber_id
     )
     .execute(transaction)
@@ -118,12 +109,12 @@ pub async fn send_confirmation_email(
     email_client: &EmailClient,
     subscriber: NewSubscriber,
     base_url: &Url,
-    subscription_token: &str,
+    subscription_token: &SubscriptionToken,
 ) -> Result<(), reqwest::Error> {
     let confirmation_link = base_url
         .join(&format!(
             "subscriptions/confirm?subscription_token={}",
-            subscription_token
+            subscription_token.as_ref()
         ))
         .unwrap();
     let plain_body = format!(
