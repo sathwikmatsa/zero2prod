@@ -18,6 +18,13 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
+    pub base_url: String,
+}
+
+impl ApplicationSettings {
+    pub fn base_url(&self) -> Result<Url, String> {
+        Url::parse(&self.base_url).map_err(|_| "Failed to parse base URL.".to_string())
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -56,8 +63,8 @@ impl DatabaseSettings {
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct EmailClientSettings {
-    base_url: String,
-    sender_email: String,
+    pub base_url: String,
+    pub sender_email: String,
     pub authorization_token: Secret<String>,
     pub timeout_milliseconds: u64,
 }
