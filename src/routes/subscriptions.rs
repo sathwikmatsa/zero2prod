@@ -2,12 +2,14 @@ use crate::domain::subscription_token::SubscriptionToken;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
+use crate::TEMPLATES;
 use actix_web::{post, web, HttpResponse};
 use chrono::Utc;
 use reqwest::Url;
 use serde::Deserialize;
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
+use tera::Context;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -131,11 +133,15 @@ pub async fn send_confirmation_email(
         "Welcome to our newsletter!\nVisit {} to confirm your subscription.",
         confirmation_link
     );
-    let html_body = format!(
-        "Welcome to our newsletter!<br />\
-        Click <a href=\"{}\">here</a> to confirm your subscription.",
-        confirmation_link
-    );
+
+    let mut context = Context::new();
+    context.insert("confirmation_link", confirmation_link.as_ref());
+
+    let html_body = match TEMPLATES.render("email.template", &context) {
+        Ok(content) => content,
+        Err(_) => plain_body.clone(),
+    };
+
     email_client
         .send_email(subscriber.email, "Welcome!", &html_body, &plain_body)
         .await
