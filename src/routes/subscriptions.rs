@@ -50,13 +50,23 @@ pub async fn subscription(
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
 
-    let subscriber_id = match insert_subscriber(&mut transaction, &subscriber).await {
-        Ok(subscriber_id) => subscriber_id,
+    let subscriber_status = match insert_or_get_subscriber(&mut transaction, &subscriber).await {
+        Ok(subscriber_status) => subscriber_status,
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
 
+    if subscriber_status.confirmed() {
+        return HttpResponse::BadRequest().finish();
+    }
+
     let subscription_token = SubscriptionToken::new();
-    if store_token(&mut transaction, subscriber_id, &subscription_token)
+    // Note: This could result in multiple subscription tokens for the same subscriber id.
+    // This is caused when subscriber (pending_confirmation) tries to subscribe again
+    // New record with new token is stored in the table when this function is called.
+    // User behaviour is not impacted i.e., new confirmation link is sent out on retry.
+    // But there could be multiple stale entries for the same subscriber even after confirmation.
+    // We could add TTL to the records to avoid stagnation. (TODO)
+    if store_token(&mut transaction, subscriber_status.id, &subscription_token)
         .await
         .is_err()
     {
@@ -131,30 +141,44 @@ pub async fn send_confirmation_email(
         .await
 }
 
+struct SubscriberStatus {
+    id: Uuid,
+    status: String,
+}
+
+impl SubscriberStatus {
+    fn confirmed(&self) -> bool {
+        self.status == "confirmed"
+    }
+}
+
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
     skip(subscriber, transaction)
 )]
-async fn insert_subscriber(
+async fn insert_or_get_subscriber(
     transaction: &mut Transaction<'_, Postgres>,
     subscriber: &NewSubscriber,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<SubscriberStatus, sqlx::Error> {
     let subscriber_id = Uuid::new_v4();
-    sqlx::query!(
+    let status = sqlx::query_as!(
+        SubscriberStatus,
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at, status)
         VALUES ($1, $2, $3, $4, 'pending_confirmation')
+        ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id, status;
         "#,
         subscriber_id,
         subscriber.email.as_ref(),
         subscriber.name.as_ref(),
         Utc::now()
     )
-    .execute(transaction)
+    .fetch_one(transaction)
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
         e
     })?;
-    Ok(subscriber_id)
+    Ok(status)
 }

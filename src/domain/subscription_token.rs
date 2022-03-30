@@ -36,7 +36,12 @@ mod test {
 
     #[test]
     fn generated_token_is_valid() {
-        let token = SubscriptionToken::new();
-        assert_ok!(SubscriptionToken::parse(token.as_ref()));
+        let token1 = SubscriptionToken::new();
+        assert_ok!(SubscriptionToken::parse(token1.as_ref()));
+
+        let token2 = SubscriptionToken::new();
+        assert_ok!(SubscriptionToken::parse(token2.as_ref()));
+
+        assert_ne!(token1.as_ref(), token2.as_ref());
     }
 }

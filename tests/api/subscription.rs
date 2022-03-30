@@ -117,3 +117,24 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
     // The two links should be identical
     assert_eq!(confirmation_links.html, confirmation_links.plain_text);
 }
+
+#[tokio::test]
+async fn new_confirmation_email_is_sent_when_user_subscribes_again() {
+    let app = spawn_app().await;
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&app.email_server)
+        .await;
+
+    let body = "name=sathwik%20matsa&email=sathwikmatsa%40gmail.com";
+    let _response = app.post_subscriptions(body.into()).await;
+    let _first_email_request = &app.email_server.received_requests().await.unwrap()[0];
+
+    // user tries to subscribe again, ignoring previous confirmation email
+    let _response = app.post_subscriptions(body.into()).await;
+    let _second_email_request = &app.email_server.received_requests().await.unwrap()[1];
+
+    // Assert new email is sent to the user.
+}
