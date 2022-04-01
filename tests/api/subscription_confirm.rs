@@ -12,6 +12,19 @@ async fn confirmations_without_token_are_rejected_with_a_400() {
 }
 
 #[tokio::test]
+async fn confirmations_without_authorized_token_are_rejected_with_a_401() {
+    let app = spawn_app().await;
+    let token = "gvArhlFk7gAmgBSfXxBe8O0nV";
+    let response = reqwest::get(&format!(
+        "{}/subscriptions/confirm?subscription_token={}",
+        app.address, token
+    ))
+    .await
+    .unwrap();
+    assert_eq!(response.status().as_u16(), 401);
+}
+
+#[tokio::test]
 async fn confirmations_with_ill_formatted_token_are_rejected_with_a_400() {
     let app = spawn_app().await;
     let test_cases = vec![
