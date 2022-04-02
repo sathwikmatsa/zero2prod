@@ -3,6 +3,8 @@ use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
 use crate::{error_chain_fmt, TEMPLATES};
+use actix_web::body::BoxBody;
+use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::{post, web, HttpResponse, ResponseError};
 use anyhow::Context;
@@ -50,6 +52,17 @@ impl ResponseError for SubscribeError {
         match self {
             Self::ValidationError(_) | Self::AlreadyConfirmedError => StatusCode::BAD_REQUEST,
             Self::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse<BoxBody> {
+        match self {
+            Self::ValidationError(_) | Self::AlreadyConfirmedError => {
+                HttpResponse::build(self.status_code())
+                    .content_type(ContentType::plaintext())
+                    .body(self.to_string())
+            }
+            _ => HttpResponse::new(self.status_code()),
         }
     }
 }

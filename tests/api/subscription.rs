@@ -19,6 +19,59 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 }
 
 #[tokio::test]
+async fn subscribe_returns_an_error_response_for_invalid_form_data() {
+    let app = spawn_app().await;
+    let (invalid_name, valid_name) = ("sat,wik", "sathwik");
+    let (invalid_email, valid_email) = ("abc.com", "abc@xyz.com");
+
+    let test_cases = vec![
+        (
+            valid_name,
+            invalid_email,
+            format!("{} is not a valid subscriber email.", invalid_email),
+        ),
+        (
+            invalid_name,
+            valid_email,
+            format!("{} is not a valid subscriber name.", invalid_name),
+        ),
+    ];
+
+    for (name, email, error_response) in test_cases {
+        let body = format!("name={}&email={}", name, email);
+
+        let response = app.post_subscriptions(body.into()).await;
+        let body = response.text().await.unwrap();
+
+        assert_eq!(error_response, body);
+    }
+}
+
+#[tokio::test]
+async fn subscribe_returns_an_error_response_when_subscription_is_already_confirmed() {
+    let app = spawn_app().await;
+    let body = "name=sathwik%20matsa&email=sathwikmatsa%40gmail.com";
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    app.post_subscriptions(body.into()).await;
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+    let confirmation_links = app.get_confirmation_links(email_request);
+    reqwest::get(confirmation_links.html).await.unwrap();
+
+    let response = app.post_subscriptions(body.into()).await;
+    let body = response.text().await.unwrap();
+
+    assert_eq!(
+        "Failed to subscribe as the subscriber is already confirmed.",
+        body
+    );
+}
+
+#[tokio::test]
 async fn subscribe_persists_new_subscriber() {
     let app = spawn_app().await;
     Mock::given(path("/email"))
