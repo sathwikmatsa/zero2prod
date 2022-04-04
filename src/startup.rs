@@ -81,6 +81,7 @@ pub fn run(
             .service(health_check)
             .service(subscription)
             .service(confirm)
+            .service(publish_newsletter)
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
             .app_data(base_url.clone())

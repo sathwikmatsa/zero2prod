@@ -170,7 +170,7 @@ pub async fn send_confirmation_email(
     };
 
     email_client
-        .send_email(subscriber.email, "Welcome!", &html_body, &plain_body)
+        .send_email(&subscriber.email, "Welcome!", &html_body, &plain_body)
         .await
 }
 
