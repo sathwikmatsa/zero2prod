@@ -28,7 +28,7 @@ pub fn error_chain_fmt(
     writeln!(f, "{}\n", err)?;
     let mut current = err.source();
     while let Some(cause) = current {
-        write!(f, "Caused by:\n\t{}", cause)?;
+        write!(f, "Caused by:\n\t{}\n", cause)?;
         current = cause.source();
     }
     Ok(())
