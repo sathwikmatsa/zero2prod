@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use tera::Tera;
 
+pub mod authentication;
 pub mod configuration;
 pub mod domain;
 pub mod email_client;
