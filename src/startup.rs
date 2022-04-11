@@ -5,6 +5,7 @@ use actix_web::dev::Server;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer};
 use reqwest::Url;
+use secrecy::Secret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
@@ -44,7 +45,14 @@ impl Application {
             .application
             .base_url()
             .expect("Failed to get application base URL.");
-        let server = run(listener, connection_pool, email_client, base_url)?;
+
+        let server = run(
+            listener,
+            connection_pool,
+            email_client,
+            base_url,
+            configuration.application.hmac_secret,
+        )?;
 
         Ok(Self { port, server })
     }
@@ -65,16 +73,19 @@ pub fn get_connection_pool(configuration: &DatabaseSettings) -> PgPool {
 }
 
 pub struct ApplicationBaseUrl(pub Url);
+pub struct HmacSecret(pub Secret<String>);
 
 pub fn run(
     listener: TcpListener,
     db_pool: PgPool,
     email_client: EmailClient,
     base_url: Url,
+    hmac_secret: Secret<String>,
 ) -> Result<Server, std::io::Error> {
     let db_pool = Data::new(db_pool);
     let email_client = Data::new(email_client);
     let base_url = Data::new(ApplicationBaseUrl(base_url));
+    let hmac_secret = Data::new(HmacSecret(hmac_secret));
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
@@ -88,6 +99,7 @@ pub fn run(
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
             .app_data(base_url.clone())
+            .app_data(hmac_secret.clone())
     })
     .listen(listener)?
     .run();
