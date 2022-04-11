@@ -30,15 +30,12 @@ unicode-segmentation = "1.9.0"
 validator = "0.14.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 rand = { version = "0.8", features= ["std_rng"] }
-lazy_static = "1.4.0"
 thiserror = "1.0.30"
 anyhow = "1.0.56"
 base64 = "0.13.0"
 argon2 = { version = "0.3", features = ["std"] }
-
-[dependencies.tera]
-version = "1"
-default-features = false
+urlencoding = "2.1.0"
+askama = "0.11.1"
 
 [dependencies.sqlx]
 version = "0.5"

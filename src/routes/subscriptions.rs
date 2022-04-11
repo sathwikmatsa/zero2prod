@@ -1,13 +1,14 @@
 use crate::domain::subscription_token::SubscriptionToken;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
+use crate::error_chain_fmt;
 use crate::startup::ApplicationBaseUrl;
-use crate::{error_chain_fmt, TEMPLATES};
 use actix_web::body::BoxBody;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;
 use actix_web::{post, web, HttpResponse, ResponseError};
 use anyhow::Context;
+use askama::Template;
 use chrono::Utc;
 use reqwest::Url;
 use serde::Deserialize;
@@ -140,6 +141,12 @@ pub async fn store_token(
     Ok(())
 }
 
+#[derive(Template)]
+#[template(path = "email.html")]
+struct EmailTemplate<'a> {
+    confirmation_link: &'a str,
+}
+
 #[tracing::instrument(
     name = "Send a confirmation email to a new subscriber",
     skip(email_client, subscriber, base_url, subscription_token)
@@ -161,10 +168,11 @@ pub async fn send_confirmation_email(
         confirmation_link
     );
 
-    let mut context = tera::Context::new();
-    context.insert("confirmation_link", confirmation_link.as_ref());
+    let email = EmailTemplate {
+        confirmation_link: confirmation_link.as_str(),
+    };
 
-    let html_body = match TEMPLATES.render("email.template", &context) {
+    let html_body = match email.render() {
         Ok(content) => content,
         Err(_) => plain_body.clone(),
     };
