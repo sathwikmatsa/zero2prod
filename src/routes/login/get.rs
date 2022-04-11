@@ -1,6 +1,7 @@
 use actix_web::cookie::Cookie;
 use actix_web::http::header::ContentType;
-use actix_web::{get, HttpRequest, HttpResponse};
+use actix_web::{get, HttpResponse};
+use actix_web_flash_messages::{IncomingFlashMessages, Level};
 use askama::Template;
 
 #[derive(Template)]
@@ -10,13 +11,13 @@ struct LoginTemplate<'a> {
 }
 
 #[get("/login")]
-pub async fn login_form(request: HttpRequest) -> HttpResponse {
-    let error = request
-        .cookie("_flash")
-        .map(|c| c.value().to_owned())
-        .unwrap_or_else(|| "".into());
+pub async fn login_form(flash_messages: IncomingFlashMessages) -> HttpResponse {
+    let error = match flash_messages.iter().find(|m| m.level() == Level::Error) {
+        Some(x) => x.content(),
+        None => "",
+    };
     let login_form = LoginTemplate {
-        error_message: error.as_str(),
+        error_message: error,
     };
 
     let mut response = HttpResponse::Ok()
