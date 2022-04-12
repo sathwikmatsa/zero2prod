@@ -2,7 +2,7 @@ use argon2::password_hash::SaltString;
 use argon2::PasswordHasher;
 use argon2::{Algorithm, Argon2, Params, Version};
 use once_cell::sync::Lazy;
-use reqwest::Url;
+use reqwest::{Response, Url};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::matchers::{method, path};
@@ -153,15 +153,24 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn get_login_html(&self) -> String {
+    async fn get(&self, path: &str) -> Response {
         self.api_client
-            .get(&format!("{}/login", &self.address))
+            .get(&format!("{}{}", &self.address, path))
             .send()
             .await
             .expect("Failed to execute request.")
-            .text()
-            .await
-            .unwrap()
+    }
+
+    pub async fn get_login_html(&self) -> String {
+        self.get("/login").await.text().await.unwrap()
+    }
+
+    pub async fn get_admin_dashboard_html(&self) -> String {
+        self.get("/admin/dashboard").await.text().await.unwrap()
+    }
+
+    pub async fn get_admin_dashboard(&self) -> Response {
+        self.get("/admin/dashboard").await
     }
 }
 

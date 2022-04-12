@@ -112,6 +112,7 @@ pub async fn run(
             .service(home)
             .service(login_form)
             .service(login)
+            .service(admin_dashboard)
             .app_data(db_pool.clone())
             .app_data(email_client.clone())
             .app_data(base_url.clone())
