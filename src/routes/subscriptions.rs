@@ -1,8 +1,8 @@
 use crate::domain::subscription_token::SubscriptionToken;
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
-use crate::error_chain_fmt;
 use crate::startup::ApplicationBaseUrl;
+use crate::util::error_chain_fmt;
 use actix_web::body::BoxBody;
 use actix_web::http::header::ContentType;
 use actix_web::http::StatusCode;

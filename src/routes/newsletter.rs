@@ -1,7 +1,7 @@
 use crate::authentication::{validate_credentials, AuthError, Credentials};
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::error_chain_fmt;
+use crate::util::error_chain_fmt;
 use actix_web::http::header::{HeaderMap, HeaderValue};
 use actix_web::http::{header, StatusCode};
 use actix_web::{post, web, HttpRequest, HttpResponse, ResponseError};

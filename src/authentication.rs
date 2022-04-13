@@ -1,5 +1,7 @@
+use crate::util::spawn_blocking_with_tracing;
 use anyhow::Context;
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::password_hash::SaltString;
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 
@@ -11,6 +13,7 @@ pub enum AuthError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+#[derive(Clone, Debug)]
 pub struct Credentials {
     pub username: String,
     pub password: Secret<String>,
@@ -40,7 +43,7 @@ pub async fn validate_credentials(
         user_id = Some(stored_user_id);
         expected_password_hash = stored_password_hash;
     }
-    tokio::task::spawn_blocking(move || {
+    spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
     .await
@@ -91,4 +94,39 @@ async fn get_stored_credentials(
     .map(|row| (row.user_id, Secret::new(row.password_hash)));
 
     Ok(row)
+}
+
+#[tracing::instrument(name = "Compute password hash", skip(password))]
+fn compute_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
+    let salt = SaltString::generate(&mut rand::thread_rng());
+    let password_hash = Argon2::new(
+        Algorithm::Argon2id,
+        Version::V0x13,
+        Params::new(15000, 2, 1, None).unwrap(),
+    )
+    .hash_password(password.expose_secret().as_bytes(), &salt)?
+    .to_string();
+    Ok(Secret::new(password_hash))
+}
+
+#[tracing::instrument(name = "Update password hash", skip(credentials, pool))]
+pub async fn update_password_hash(
+    credentials: Credentials,
+    pool: &PgPool,
+) -> Result<(), anyhow::Error> {
+    let password_hash = spawn_blocking_with_tracing(move || compute_hash(credentials.password))
+        .await?
+        .context("Failed to hash password.")?;
+    sqlx::query!(
+        "UPDATE users
+        SET password_hash = $1
+        WHERE username = $2",
+        password_hash.expose_secret(),
+        credentials.username,
+    )
+    .execute(pool)
+    .await
+    .context("Failed to update password")?;
+
+    Ok(())
 }

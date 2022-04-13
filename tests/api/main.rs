@@ -1,7 +1,9 @@
 mod admin_dashboard;
+mod change_password;
 mod health_check;
 mod helper;
 mod login;
+mod logout;
 mod newsletter;
 mod subscription;
 mod subscription_confirm;

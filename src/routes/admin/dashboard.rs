@@ -1,11 +1,9 @@
-use crate::routes::e500;
 use crate::session_state::TypedSession;
-use actix_web::http::header::{ContentType, LOCATION};
+use crate::util::{e500, get_username, see_other};
+use actix_web::http::header::ContentType;
 use actix_web::{get, web, HttpResponse};
-use anyhow::Context;
 use askama::Template;
 use sqlx::PgPool;
-use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "admin_dashboard.html")]
@@ -22,9 +20,7 @@ pub async fn admin_dashboard(
     let username = if let Some(user_id) = session.get_user_id().map_err(e500)? {
         get_username(user_id, &pool).await.map_err(e500)?
     } else {
-        return Ok(HttpResponse::SeeOther()
-            .insert_header((LOCATION, "/login"))
-            .finish());
+        return Ok(see_other("/login"));
     };
 
     let admin_dashboard = DashboardTemplate {
@@ -35,20 +31,4 @@ pub async fn admin_dashboard(
     Ok(HttpResponse::Ok()
         .content_type(ContentType::html())
         .body(admin_dashboard_html))
-}
-
-#[tracing::instrument(name = "Get username", skip(pool))]
-async fn get_username(user_id: Uuid, pool: &PgPool) -> Result<String, anyhow::Error> {
-    let row = sqlx::query!(
-        r#"
-        SELECT username
-        FROM users
-        WHERE user_id = $1
-        "#,
-        user_id,
-    )
-    .fetch_one(pool)
-    .await
-    .context("Failed to perform a query to retrieve a username.")?;
-    Ok(row.username)
 }

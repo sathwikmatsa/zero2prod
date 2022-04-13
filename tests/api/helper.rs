@@ -141,16 +141,30 @@ impl TestApp {
             .unwrap();
     }
 
-    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    pub async fn post<Body>(&self, path: &str, body: &Body) -> reqwest::Response
     where
         Body: serde::Serialize,
     {
         self.api_client
-            .post(&format!("{}/login", &self.address))
+            .post(&format!("{}{}", &self.address, path))
             .form(body)
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.post("/login", body).await
+    }
+
+    pub async fn post_change_pass<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
+        self.post("/admin/password", body).await
     }
 
     async fn get(&self, path: &str) -> Response {
@@ -169,8 +183,28 @@ impl TestApp {
         self.get("/admin/dashboard").await.text().await.unwrap()
     }
 
+    pub async fn logout(&self) -> Response {
+        self.get("/admin/logout").await
+    }
+
+    pub async fn login(&self) -> Response {
+        let login_body = serde_json::json!({
+            "username": &self.test_user.username,
+            "password": &self.test_user.password
+        });
+        self.post_login(&login_body).await
+    }
+
     pub async fn get_admin_dashboard(&self) -> Response {
         self.get("/admin/dashboard").await
+    }
+
+    pub async fn get_change_password_form(&self) -> Response {
+        self.get("/admin/password").await
+    }
+
+    pub async fn get_change_password_form_html(&self) -> String {
+        self.get("/admin/password").await.text().await.unwrap()
     }
 }
 
