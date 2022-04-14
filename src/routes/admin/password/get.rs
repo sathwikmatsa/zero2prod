@@ -14,10 +14,6 @@ struct PasswordFormTemplate<'a> {
 }
 
 #[get("/password")]
-#[tracing::instrument(
-    skip(pool, flash_messages),
-    fields(username=tracing::field::Empty)
-)]
 pub async fn change_password_form(
     flash_messages: IncomingFlashMessages,
     pool: web::Data<PgPool>,
@@ -25,7 +21,6 @@ pub async fn change_password_form(
 ) -> Result<HttpResponse, actix_web::Error> {
     let user_id = user_id.into_inner();
     let username = get_username(*user_id, &pool).await.map_err(e500)?;
-    tracing::Span::current().record("username", &tracing::field::display(&username));
 
     let messages = flash_messages
         .iter()

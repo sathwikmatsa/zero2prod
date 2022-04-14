@@ -12,7 +12,7 @@ struct DashboardTemplate<'a> {
 }
 
 #[get("/dashboard")]
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool, user_id), fields(user_id=%*user_id))]
 pub async fn admin_dashboard(
     pool: web::Data<PgPool>,
     user_id: web::ReqData<UserId>,

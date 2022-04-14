@@ -13,11 +13,13 @@ async fn you_must_be_logged_in_to_access_newsletter_form() {
 async fn you_must_be_logged_in_to_post_newsletter() {
     let app = spawn_app().await;
 
-    let body = "title=Newsletter%20title&\
-    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
-    text_content=Newsletter%20body%20as%20plain%20text";
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+    });
 
-    let response = app.post_newsletters(body.into()).await;
+    let response = app.post_newsletter(&newsletter_request_body).await;
     assert_is_redirect_to(&response, "/login");
 }
 
@@ -34,13 +36,15 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         .mount(&app.email_server)
         .await;
 
-    let body = "title=Newsletter%20title&\
-    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
-    text_content=Newsletter%20body%20as%20plain%20text";
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+    });
 
-    let response = app.post_newsletters(body.into()).await;
-
-    assert_eq!(response.status().as_u16(), 200);
+    app.post_newsletter(&newsletter_request_body).await;
+    let html_page = app.get_newsletter_form_html().await;
+    assert!(html_page.contains("<p><i>The newsletter issue has been published!</i></p>"));
 }
 
 #[tokio::test]
@@ -56,13 +60,17 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .mount(&app.email_server)
         .await;
 
-    let body = "title=Newsletter%20title&\
-    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
-    text_content=Newsletter%20body%20as%20plain%20text";
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text_content": "Newsletter body as plain text",
+        "html_content": "<p>Newsletter body as HTML</p>",
+    });
 
-    let response = app.post_newsletters(body.into()).await;
+    let response = app.post_newsletter(&newsletter_request_body).await;
+    assert_is_redirect_to(&response, "/admin/newsletter");
 
-    assert_eq!(response.status().as_u16(), 200);
+    let html = app.get_newsletter_form_html().await;
+    assert!(html.contains("<p><i>The newsletter issue has been published!</i></p>"));
 }
 
 #[tokio::test]
@@ -71,23 +79,29 @@ async fn newsletter_returns_400_for_invalid_data() {
     app.login().await;
     let test_cases = vec![
         (
-            "html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
-            text_content=Newsletter%20body%20as%20plain%20text",
+            serde_json::json!({
+                "text_content": "Newsletter body as plain text",
+                "html_content": "<p>Newsletter body as HTML</p>",
+            }),
             "missing title",
         ),
         (
-            "title=Newsletter%20title&\
-            text_content=Newsletter%20body%20as%20plain%20text",
+            serde_json::json!({
+                "title": "Newsletter title",
+                "text_content": "Newsletter body as plain text",
+            }),
             "missing html content",
         ),
         (
-            "title=Newsletter%20title&\
-            html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E",
+            serde_json::json!({
+                "title": "Newsletter title",
+                "html_content": "<p>Newsletter body as HTML</p>",
+            }),
             "missing text content",
         ),
     ];
     for (invalid_body, error_message) in test_cases {
-        let response = app.post_newsletters(invalid_body.into()).await;
+        let response = app.post_newsletter(&invalid_body).await;
 
         assert_eq!(
             400,

@@ -1,9 +1,10 @@
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::util::{error_chain_fmt, get_username};
+use crate::util::{error_chain_fmt, get_username, see_other};
 use actix_web::http::StatusCode;
 use actix_web::{post, web, HttpResponse, ResponseError};
+use actix_web_flash_messages::FlashMessage;
 use anyhow::Context;
 use sqlx::PgPool;
 
@@ -41,7 +42,7 @@ impl ResponseError for PublishError {
 #[tracing::instrument(
     name = "Publish a newsletter issue",
     skip(form, pool, email_client),
-    fields(username=tracing::field::Empty)
+    fields(username=tracing::field::Empty, user_id=%*user_id)
 )]
 pub async fn publish_newsletter(
     form: web::Form<FormData>,
@@ -80,7 +81,8 @@ pub async fn publish_newsletter(
             }
         }
     }
-    Ok(HttpResponse::Ok().finish())
+    FlashMessage::info("The newsletter issue has been published!").send();
+    Ok(see_other("/admin/newsletter"))
 }
 
 struct ConfirmedSubscriber {

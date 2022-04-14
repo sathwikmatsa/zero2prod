@@ -15,7 +15,7 @@ pub struct FormData {
 
 #[tracing::instrument(
     skip(form, pool, session),
-    fields(username=tracing::field::Empty)
+    fields(username=tracing::field::Empty, user_id=%*user_id)
 )]
 #[post("/password")]
 pub async fn change_password(
