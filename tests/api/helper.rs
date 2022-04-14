@@ -97,10 +97,11 @@ impl TestApp {
         ConfirmationLinks { html, plain_text }
     }
 
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletters(&self, body: String) -> reqwest::Response {
         self.api_client
             .post(&format!("{}/admin/newsletter", &self.address))
-            .json(&body)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
             .send()
             .await
             .expect("Failed to execute request.")
@@ -179,7 +180,7 @@ impl TestApp {
     }
 
     pub async fn get_admin_dashboard_html(&self) -> String {
-        self.get("/admin/dashboard").await.text().await.unwrap()
+        self.get_admin_dashboard().await.text().await.unwrap()
     }
 
     pub async fn logout(&self) -> Response {
@@ -205,7 +206,11 @@ impl TestApp {
     }
 
     pub async fn get_change_password_form_html(&self) -> String {
-        self.get("/admin/password").await.text().await.unwrap()
+        self.get_change_password_form().await.text().await.unwrap()
+    }
+
+    pub async fn get_newsletter_form(&self) -> Response {
+        self.get("/admin/newsletter").await
     }
 }
 

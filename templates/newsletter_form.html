@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Newsletter Form</title>
+</head>
+<body>
+<div>
+    <h3> Send a newsletter to subscribers </h3>
+    {% for message in messages %}
+    <p><i>{{ message }}</i></p>
+    {% endfor %}
+    <form action="/admin/newsletter" method="post">
+        <label> Title <br>
+            <input
+                    type="text"
+                    placeholder="Enter subject"
+                    name="title"
+                    required
+            >
+        </label><br>
+        <label> Body - Plain Text <br>
+            <textarea rows="4" cols="50" name="text_content" placeholder=" Enter content in plain text" required></textarea>
+        </label><br>
+        <label> Body - html <br>
+            <textarea rows="4" cols="50" name="html_content" placeholder=" Enter content in html" required></textarea>
+        </label><br>
+        <button type="submit">Send Newsletter</button>
+    </form>
+    <p><a href="/admin/dashboard">&lt;- Back</a></p>
+</div>
+</body>
+</html>

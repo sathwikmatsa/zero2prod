@@ -35,11 +35,11 @@ impl TryFrom<FormData> for NewSubscriber {
 #[derive(thiserror::Error)]
 pub enum SubscribeError {
     #[error("{0}")]
-    ValidationError(String),
+    Validation(String),
     #[error("Failed to subscribe as the subscriber is already confirmed.")]
-    AlreadyConfirmedError,
+    AlreadyConfirmed,
     #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    Unexpected(#[from] anyhow::Error),
 }
 
 impl fmt::Debug for SubscribeError {
@@ -51,18 +51,16 @@ impl fmt::Debug for SubscribeError {
 impl ResponseError for SubscribeError {
     fn status_code(&self) -> StatusCode {
         match self {
-            Self::ValidationError(_) | Self::AlreadyConfirmedError => StatusCode::BAD_REQUEST,
-            Self::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Validation(_) | Self::AlreadyConfirmed => StatusCode::BAD_REQUEST,
+            Self::Unexpected(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn error_response(&self) -> HttpResponse<BoxBody> {
         match self {
-            Self::ValidationError(_) | Self::AlreadyConfirmedError => {
-                HttpResponse::build(self.status_code())
-                    .content_type(ContentType::plaintext())
-                    .body(self.to_string())
-            }
+            Self::Validation(_) | Self::AlreadyConfirmed => HttpResponse::build(self.status_code())
+                .content_type(ContentType::plaintext())
+                .body(self.to_string()),
             _ => HttpResponse::new(self.status_code()),
         }
     }
@@ -83,7 +81,7 @@ pub async fn subscription(
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> Result<HttpResponse, SubscribeError> {
-    let subscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
+    let subscriber = form.0.try_into().map_err(SubscribeError::Validation)?;
 
     let mut transaction = pool
         .begin()
@@ -95,7 +93,7 @@ pub async fn subscription(
         .context("Failed to insert new subscriber in the database.")?;
 
     if subscriber_status.confirmed() {
-        return Err(SubscribeError::AlreadyConfirmedError);
+        return Err(SubscribeError::AlreadyConfirmed);
     }
 
     let subscription_token = SubscriptionToken::new();
@@ -125,7 +123,7 @@ pub async fn subscription(
     name = "Store subscription token in the database",
     skip(subscription_token, transaction)
 )]
-pub async fn store_token(
+async fn store_token(
     transaction: &mut Transaction<'_, Postgres>,
     subscriber_id: Uuid,
     subscription_token: &SubscriptionToken,
@@ -151,7 +149,7 @@ struct EmailTemplate<'a> {
     name = "Send a confirmation email to a new subscriber",
     skip(email_client, subscriber, base_url, subscription_token)
 )]
-pub async fn send_confirmation_email(
+async fn send_confirmation_email(
     email_client: &EmailClient,
     subscriber: NewSubscriber,
     base_url: &Url,

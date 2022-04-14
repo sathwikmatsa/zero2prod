@@ -2,22 +2,16 @@ use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::util::{error_chain_fmt, get_username};
-use actix_web::http::header::HeaderValue;
-use actix_web::http::{header, StatusCode};
+use actix_web::http::StatusCode;
 use actix_web::{post, web, HttpResponse, ResponseError};
 use anyhow::Context;
 use sqlx::PgPool;
 
 #[derive(serde::Deserialize)]
-pub struct BodyData {
+pub struct FormData {
     title: String,
-    content: Content,
-}
-
-#[derive(serde::Deserialize)]
-pub struct Content {
-    html: String,
-    text: String,
+    text_content: String,
+    html_content: String,
 }
 
 #[derive(thiserror::Error)]
@@ -41,29 +35,16 @@ impl ResponseError for PublishError {
             PublishError::AuthError(_) => StatusCode::UNAUTHORIZED,
         }
     }
-    fn error_response(&self) -> HttpResponse {
-        match self {
-            PublishError::UnexpectedError(_) => HttpResponse::new(self.status_code()),
-            PublishError::AuthError(_) => {
-                let mut response = HttpResponse::new(self.status_code());
-                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
-                response
-                    .headers_mut()
-                    .insert(header::WWW_AUTHENTICATE, header_value);
-                response
-            }
-        }
-    }
 }
 
 #[post("/newsletter")]
 #[tracing::instrument(
     name = "Publish a newsletter issue",
-    skip(body, pool, email_client),
+    skip(form, pool, email_client),
     fields(username=tracing::field::Empty)
 )]
 pub async fn publish_newsletter(
-    body: web::Json<BodyData>,
+    form: web::Form<FormData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
@@ -81,9 +62,9 @@ pub async fn publish_newsletter(
                 email_client
                     .send_email(
                         &subscriber.email,
-                        &body.title,
-                        &body.content.html,
-                        &body.content.text,
+                        &form.0.title,
+                        &form.0.html_content,
+                        &form.0.text_content,
                     )
                     .await
                     .with_context(|| {

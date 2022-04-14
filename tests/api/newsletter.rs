@@ -3,18 +3,21 @@ use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
+async fn you_must_be_logged_in_to_access_newsletter_form() {
+    let app = spawn_app().await;
+    let response = app.get_newsletter_form().await;
+    assert_is_redirect_to(&response, "/login");
+}
+
+#[tokio::test]
 async fn you_must_be_logged_in_to_post_newsletter() {
     let app = spawn_app().await;
 
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "content": {
-            "text": "Newsletter body as plain text",
-            "html": "<p>Newsletter body as HTML</p>",
-        }
-    });
+    let body = "title=Newsletter%20title&\
+    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
+    text_content=Newsletter%20body%20as%20plain%20text";
 
-    let response = app.post_newsletters(newsletter_request_body).await;
+    let response = app.post_newsletters(body.into()).await;
     assert_is_redirect_to(&response, "/login");
 }
 
@@ -31,15 +34,11 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         .mount(&app.email_server)
         .await;
 
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "content": {
-            "text": "Newsletter body as plain text",
-            "html": "<p>Newsletter body as HTML</p>",
-        }
-    });
+    let body = "title=Newsletter%20title&\
+    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
+    text_content=Newsletter%20body%20as%20plain%20text";
 
-    let response = app.post_newsletters(newsletter_request_body).await;
+    let response = app.post_newsletters(body.into()).await;
 
     assert_eq!(response.status().as_u16(), 200);
 }
@@ -57,15 +56,11 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .mount(&app.email_server)
         .await;
 
-    let newsletter_request_body = serde_json::json!({
-        "title": "Newsletter title",
-        "content": {
-            "text": "Newsletter body as plain text",
-            "html": "<p>Newsletter body as HTML</p>",
-        }
-    });
+    let body = "title=Newsletter%20title&\
+    html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
+    text_content=Newsletter%20body%20as%20plain%20text";
 
-    let response = app.post_newsletters(newsletter_request_body).await;
+    let response = app.post_newsletters(body.into()).await;
 
     assert_eq!(response.status().as_u16(), 200);
 }
@@ -76,21 +71,23 @@ async fn newsletter_returns_400_for_invalid_data() {
     app.login().await;
     let test_cases = vec![
         (
-            serde_json::json!({
-            "content": {
-                "text": "Newsletter body as plain text",
-                "html": "<p>Newsletter body as HTML</p>",
-                }
-            }),
+            "html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E&\
+            text_content=Newsletter%20body%20as%20plain%20text",
             "missing title",
         ),
         (
-            serde_json::json!({"title": "Newsletter!"}),
-            "missing content",
+            "title=Newsletter%20title&\
+            text_content=Newsletter%20body%20as%20plain%20text",
+            "missing html content",
+        ),
+        (
+            "title=Newsletter%20title&\
+            html_content=%3Cp%3ENewsletter%20body%20as%20HTML%3C%2Fp%3E",
+            "missing text content",
         ),
     ];
     for (invalid_body, error_message) in test_cases {
-        let response = app.post_newsletters(invalid_body).await;
+        let response = app.post_newsletters(invalid_body.into()).await;
 
         assert_eq!(
             400,

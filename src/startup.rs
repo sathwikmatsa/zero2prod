@@ -117,6 +117,7 @@ pub async fn run(
                 web::scope("/admin")
                     .wrap(from_fn(reject_anonymous_users))
                     .service(admin_dashboard)
+                    .service(newsletter_form)
                     .service(publish_newsletter)
                     .service(logout_user)
                     .service(change_password_form)
