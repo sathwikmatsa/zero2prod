@@ -99,8 +99,7 @@ impl TestApp {
 
     pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
         self.api_client
-            .post(&format!("{}/newsletter", &self.address))
-            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
+            .post(&format!("{}/admin/newsletter", &self.address))
             .json(&body)
             .send()
             .await
@@ -192,7 +191,9 @@ impl TestApp {
             "username": &self.test_user.username,
             "password": &self.test_user.password
         });
-        self.post_login(&login_body).await
+        let response = self.post_login(&login_body).await;
+        assert_is_redirect_to(&response, "/admin/dashboard");
+        response
     }
 
     pub async fn get_admin_dashboard(&self) -> Response {

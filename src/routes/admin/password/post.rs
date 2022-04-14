@@ -1,4 +1,4 @@
-use crate::authentication::{update_password_hash, validate_credentials, Credentials};
+use crate::authentication::{update_password_hash, validate_credentials, Credentials, UserId};
 use crate::session_state::TypedSession;
 use crate::util::{e500, get_username, see_other};
 use actix_web::{post, web, HttpResponse};
@@ -15,20 +15,18 @@ pub struct FormData {
 
 #[tracing::instrument(
     skip(form, pool, session),
-    fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
+    fields(username=tracing::field::Empty)
 )]
-#[post("/admin/password")]
+#[post("/password")]
 pub async fn change_password(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
     session: TypedSession,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let username = if let Some(user_id) = session.get_user_id().map_err(e500)? {
-        tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
-        get_username(user_id, &pool).await.map_err(e500)?
-    } else {
-        return Ok(see_other("/login"));
-    };
+    let user_id = user_id.into_inner();
+    let username = get_username(*user_id, &pool).await.map_err(e500)?;
+    tracing::Span::current().record("username", &tracing::field::display(&username));
 
     if form.0.new_password.expose_secret() != form.0.confirm_new_password.expose_secret() {
         FlashMessage::error("New password does not match with confirmation password.").send();

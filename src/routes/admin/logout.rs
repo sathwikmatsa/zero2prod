@@ -2,7 +2,7 @@ use crate::session_state::TypedSession;
 use actix_web::http::header::LOCATION;
 use actix_web::{get, HttpResponse};
 
-#[get("/admin/logout")]
+#[get("/logout")]
 #[tracing::instrument(skip(session))]
 pub async fn logout_user(session: TypedSession) -> HttpResponse {
     session.purge();

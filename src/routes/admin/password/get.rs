@@ -1,5 +1,5 @@
-use crate::session_state::TypedSession;
-use crate::util::{e500, get_username, see_other};
+use crate::authentication::UserId;
+use crate::util::{e500, get_username};
 use actix_web::http::header::ContentType;
 use actix_web::{get, web, HttpResponse};
 use actix_web_flash_messages::IncomingFlashMessages;
@@ -13,22 +13,18 @@ struct PasswordFormTemplate<'a> {
     messages: Vec<&'a str>,
 }
 
-#[get("/admin/password")]
+#[get("/password")]
 #[tracing::instrument(
-skip(session, pool, flash_messages),
-fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
+    skip(pool, flash_messages),
+    fields(username=tracing::field::Empty)
 )]
 pub async fn change_password_form(
     flash_messages: IncomingFlashMessages,
-    session: TypedSession,
     pool: web::Data<PgPool>,
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let username = if let Some(user_id) = session.get_user_id().map_err(e500)? {
-        tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
-        get_username(user_id, &pool).await.map_err(e500)?
-    } else {
-        return Ok(see_other("/login"));
-    };
+    let user_id = user_id.into_inner();
+    let username = get_username(*user_id, &pool).await.map_err(e500)?;
     tracing::Span::current().record("username", &tracing::field::display(&username));
 
     let messages = flash_messages

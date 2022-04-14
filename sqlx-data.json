@@ -29,6 +29,19 @@
     },
     "query": "\n        INSERT INTO subscriptions (id, email, name, subscribed_at, status)\n        VALUES ($1, $2, $3, $4, 'pending_confirmation')\n        ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name\n        RETURNING id, status;\n        "
   },
+  "2d5f10cd52d24d12d41aa72ce72f42deab37dd26dc6c9f1a467a5e5bdcf5aa7e": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "UPDATE users\n        SET password_hash = $1\n        WHERE username = $2"
+  },
   "33b11051e779866db9aeb86d28a59db07a94323ffdc59a5a2c1da694ebe9a65f": {
     "describe": {
       "columns": [
