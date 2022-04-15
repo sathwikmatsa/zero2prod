@@ -15,6 +15,20 @@ pub struct FormData {
     html_content: String,
 }
 
+impl FormData {
+    fn validate(&self) -> Result<(), String> {
+        if self.title.is_empty() {
+            Err("Validation error: field `title` cannot be empty.".into())
+        } else if self.text_content.is_empty() {
+            Err("Validation error: field `text_content` cannot be empty.".into())
+        } else if self.html_content.is_empty() {
+            Err("Validation error: field `html_content` cannot be empty.".into())
+        } else {
+            Ok(())
+        }
+    }
+}
+
 #[derive(thiserror::Error)]
 pub enum PublishError {
     #[error("Authentication failed.")]
@@ -45,11 +59,18 @@ impl ResponseError for PublishError {
     fields(username=tracing::field::Empty, user_id=%*user_id)
 )]
 pub async fn publish_newsletter(
-    form: web::Form<FormData>,
+    form: Result<web::Form<FormData>, actix_web::Error>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, PublishError> {
+    let form = match form {
+        Ok(form) => match form.validate() {
+            Ok(_) => form,
+            Err(e) => return Ok(send_flash_message_and_redirect(e, "/admin/newsletter")),
+        },
+        Err(e) => return Ok(send_flash_message_and_redirect(e, "/admin/newsletter")),
+    };
     let user_id = user_id.into_inner();
     let username = get_username(*user_id, &pool)
         .await
@@ -109,4 +130,9 @@ async fn get_confirmed_subscribers(
     })
     .collect();
     Ok(confirmed_subscribers)
+}
+
+fn send_flash_message_and_redirect(error: impl ToString, location: &str) -> HttpResponse {
+    FlashMessage::error(error.to_string()).send();
+    see_other(location)
 }

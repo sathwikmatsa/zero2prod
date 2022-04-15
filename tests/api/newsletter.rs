@@ -83,31 +83,53 @@ async fn newsletter_returns_400_for_invalid_data() {
                 "text_content": "Newsletter body as plain text",
                 "html_content": "<p>Newsletter body as HTML</p>",
             }),
-            "missing title",
+            "Parse error: missing field `title`.",
         ),
         (
             serde_json::json!({
                 "title": "Newsletter title",
                 "text_content": "Newsletter body as plain text",
             }),
-            "missing html content",
+            "Parse error: missing field `html_content`.",
         ),
         (
             serde_json::json!({
                 "title": "Newsletter title",
                 "html_content": "<p>Newsletter body as HTML</p>",
             }),
-            "missing text content",
+            "Parse error: missing field `text_content`.",
+        ),
+        (
+            serde_json::json!({
+                "title": "",
+                "text_content": "Newsletter body as plain text",
+                "html_content": "<p>Newsletter body as HTML</p>",
+            }),
+            "Validation error: field `title` cannot be empty.",
+        ),
+        (
+            serde_json::json!({
+                "title": "Newsletter title",
+                "text_content": "Newsletter body as plain text",
+                "html_content": "",
+            }),
+            "Validation error: field `html_content` cannot be empty.",
+        ),
+        (
+            serde_json::json!({
+                "title": "Newsletter title",
+                "html_content": "<p>Newsletter body as HTML</p>",
+                "text_content": "",
+            }),
+            "Validation error: field `text_content` cannot be empty.",
         ),
     ];
-    for (invalid_body, error_message) in test_cases {
+    for (invalid_body, flash_message) in test_cases {
         let response = app.post_newsletter(&invalid_body).await;
+        assert_is_redirect_to(&response, "/admin/newsletter");
 
-        assert_eq!(
-            400,
-            response.status().as_u16(),
-            "The API did not fail with 400 Bad Request when the payload was {}.",
-            error_message
-        );
+        let html = app.get_newsletter_form_html().await;
+
+        assert!(html.contains(flash_message));
     }
 }
