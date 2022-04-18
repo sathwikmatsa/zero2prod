@@ -2,7 +2,7 @@ use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::idempotency::{get_saved_response, save_response, IdempotencyKey};
-use crate::util::{e400, e500, see_other};
+use crate::util::{e500, see_other, NonEmptyString};
 use actix_web::{post, web, HttpResponse};
 use actix_web_flash_messages::FlashMessage;
 use anyhow::Context;
@@ -10,25 +10,10 @@ use sqlx::PgPool;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
-    title: String,
-    text_content: String,
-    html_content: String,
-    idempotency_key: String,
-}
-
-// TODO: replace with a custom non empty string type
-impl FormData {
-    fn validate(&self) -> Result<(), String> {
-        if self.title.is_empty() {
-            Err("Validation error: field `title` cannot be empty.".into())
-        } else if self.text_content.is_empty() {
-            Err("Validation error: field `text_content` cannot be empty.".into())
-        } else if self.html_content.is_empty() {
-            Err("Validation error: field `html_content` cannot be empty.".into())
-        } else {
-            Ok(())
-        }
-    }
+    title: NonEmptyString,
+    text_content: NonEmptyString,
+    html_content: NonEmptyString,
+    idempotency_key: IdempotencyKey,
 }
 
 #[post("/newsletter")]
@@ -43,23 +28,14 @@ pub async fn publish_newsletter(
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    // TODO: no error trace in logs, wrap with BadRequest?
     let form = match form {
-        Ok(form) => match form.validate() {
-            Ok(_) => form,
-            Err(e) => return Ok(send_flash_message_and_redirect(e, "/admin/newsletter")),
-        },
-        Err(e) => return Ok(send_flash_message_and_redirect(e, "/admin/newsletter")),
+        Ok(f) => f,
+        Err(e) => {
+            return Ok(send_flash_message_and_redirect(e, "/admin/newsletter"));
+        }
     };
-    let FormData {
-        title,
-        text_content,
-        html_content,
-        idempotency_key,
-    } = form.0;
-    let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
     let user_id = user_id.into_inner();
-    if let Some(saved_response) = get_saved_response(&pool, &idempotency_key, *user_id)
+    if let Some(saved_response) = get_saved_response(&pool, &form.0.idempotency_key, *user_id)
         .await
         .map_err(e500)?
     {
@@ -71,7 +47,12 @@ pub async fn publish_newsletter(
     for subscriber in subscribers {
         match subscriber {
             Ok(subscriber) => email_client
-                .send_email(&subscriber.email, &title, &html_content, &text_content)
+                .send_email(
+                    &subscriber.email,
+                    form.0.title.as_ref(),
+                    form.0.html_content.as_ref(),
+                    form.0.text_content.as_ref(),
+                )
                 .await
                 .with_context(|| format!("Failed to send newsletter issue to {}", subscriber.email))
                 .map_err(e500)?,
@@ -86,7 +67,7 @@ pub async fn publish_newsletter(
     }
     FlashMessage::info("The newsletter issue has been published!").send();
     let response = see_other("/admin/newsletter");
-    let response = save_response(&pool, &idempotency_key, *user_id, response)
+    let response = save_response(&pool, &form.0.idempotency_key, *user_id, response)
         .await
         .map_err(e500)?;
     Ok(response)

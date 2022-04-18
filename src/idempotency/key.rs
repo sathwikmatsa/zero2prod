@@ -1,4 +1,5 @@
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct IdempotencyKey(String);
 
 impl TryFrom<String> for IdempotencyKey {

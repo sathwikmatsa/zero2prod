@@ -121,7 +121,7 @@ async fn newsletter_redirects_with_flash_message_for_invalid_data() {
                 "html_content": "<p>Newsletter body as HTML</p>",
                 "idempotency_key": uuid::Uuid::new_v4().to_string()
             }),
-            "Validation error: field `title` cannot be empty.",
+            "Parse error: value cannot be empty.",
         ),
         (
             serde_json::json!({
@@ -130,7 +130,7 @@ async fn newsletter_redirects_with_flash_message_for_invalid_data() {
                 "html_content": "",
                 "idempotency_key": uuid::Uuid::new_v4().to_string()
             }),
-            "Validation error: field `html_content` cannot be empty.",
+            "Parse error: value cannot be empty.",
         ),
         (
             serde_json::json!({
@@ -139,7 +139,25 @@ async fn newsletter_redirects_with_flash_message_for_invalid_data() {
                 "text_content": "",
                 "idempotency_key": uuid::Uuid::new_v4().to_string()
             }),
-            "Validation error: field `text_content` cannot be empty.",
+            "Parse error: value cannot be empty.",
+        ),
+        (
+            serde_json::json!({
+                "title": "Newsletter title",
+                "text_content": "Newsletter body as plain text",
+                "html_content": "<p>Newsletter body as HTML</p>",
+                "idempotency_key": "",
+            }),
+            "Parse error: The idempotency key cannot be empty.",
+        ),
+        (
+            serde_json::json!({
+                "title": "Newsletter title",
+                "text_content": "Newsletter body as plain text",
+                "html_content": "<p>Newsletter body as HTML</p>",
+                "idempotency_key": "a".repeat(51)
+            }),
+            "Parse error: The idempotency key must be shorter than 50 characters.",
         ),
     ];
     for (invalid_body, flash_message) in test_cases {

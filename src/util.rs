@@ -5,6 +5,32 @@ use sqlx::PgPool;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(try_from = "String")]
+pub struct NonEmptyString(String);
+
+impl TryFrom<String> for NonEmptyString {
+    type Error = anyhow::Error;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            anyhow::bail!("value cannot be empty");
+        }
+        Ok(Self(value))
+    }
+}
+
+impl From<NonEmptyString> for String {
+    fn from(v: NonEmptyString) -> Self {
+        v.0
+    }
+}
+
+impl AsRef<str> for NonEmptyString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[tracing::instrument(name = "Get username", skip(pool))]
 pub async fn get_username(user_id: Uuid, pool: &PgPool) -> Result<String, anyhow::Error> {
     let row = sqlx::query!(

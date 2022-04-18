@@ -27,7 +27,7 @@ pub async fn validate_credentials(
     // Note: We're still verifying hash for non existent user by using a default password hash
     // to prevent timing side channel attack. The downside of the current implementation is,
     // we report invalid password in case of unknown username. Also the default hash is hard-corded
-    // with hash algo and parameters. Fix it! (TODO)
+    // with hash algo and parameters. TODO
     let mut user_id = None;
     let mut expected_password_hash = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\
