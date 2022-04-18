@@ -25,6 +25,7 @@
         <label> Body - html <br>
             <textarea rows="4" cols="50" name="html_content" placeholder=" Enter content in html" required></textarea>
         </label><br>
+        <input hidden type="text" name="idempotency_key" value="{{idempotency_key}}">
         <button type="submit">Send Newsletter</button>
     </form>
     <p><a href="/admin/dashboard">&lt;- Back</a></p>

@@ -3,10 +3,12 @@ use actix_web::http::header::ContentType;
 use actix_web::{get, HttpResponse};
 use actix_web_flash_messages::IncomingFlashMessages;
 use askama::Template;
+use uuid::Uuid;
 
 #[derive(Template)]
 #[template(path = "newsletter_form.html")]
 struct NewsletterFormTemplate<'a> {
+    idempotency_key: String,
     messages: Vec<&'a str>,
 }
 
@@ -19,7 +21,10 @@ pub async fn newsletter_form(
         .map(|m| m.content())
         .collect::<Vec<_>>();
 
-    let newsletter_form = NewsletterFormTemplate { messages };
+    let newsletter_form = NewsletterFormTemplate {
+        messages,
+        idempotency_key: Uuid::new_v4().to_string(),
+    };
     let newsletter_form_html = newsletter_form.render().map_err(e500)?;
 
     Ok(HttpResponse::Ok()

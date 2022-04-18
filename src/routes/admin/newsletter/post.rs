@@ -1,9 +1,9 @@
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::util::{error_chain_fmt, get_username, see_other};
-use actix_web::http::StatusCode;
-use actix_web::{post, web, HttpResponse, ResponseError};
+use crate::idempotency::{get_saved_response, save_response, IdempotencyKey};
+use crate::util::{e400, e500, see_other};
+use actix_web::{post, web, HttpResponse};
 use actix_web_flash_messages::FlashMessage;
 use anyhow::Context;
 use sqlx::PgPool;
@@ -13,8 +13,10 @@ pub struct FormData {
     title: String,
     text_content: String,
     html_content: String,
+    idempotency_key: String,
 }
 
+// TODO: replace with a custom non empty string type
 impl FormData {
     fn validate(&self) -> Result<(), String> {
         if self.title.is_empty() {
@@ -29,41 +31,19 @@ impl FormData {
     }
 }
 
-#[derive(thiserror::Error)]
-pub enum PublishError {
-    #[error("Authentication failed.")]
-    AuthError(#[source] anyhow::Error),
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-impl std::fmt::Debug for PublishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        error_chain_fmt(self, f)
-    }
-}
-
-impl ResponseError for PublishError {
-    fn status_code(&self) -> StatusCode {
-        match self {
-            PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            PublishError::AuthError(_) => StatusCode::UNAUTHORIZED,
-        }
-    }
-}
-
 #[post("/newsletter")]
 #[tracing::instrument(
     name = "Publish a newsletter issue",
     skip(form, pool, email_client),
-    fields(username=tracing::field::Empty, user_id=%*user_id)
+    fields(user_id=%*user_id)
 )]
 pub async fn publish_newsletter(
     form: Result<web::Form<FormData>, actix_web::Error>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     user_id: web::ReqData<UserId>,
-) -> Result<HttpResponse, PublishError> {
+) -> Result<HttpResponse, actix_web::Error> {
+    // TODO: no error trace in logs, wrap with BadRequest?
     let form = match form {
         Ok(form) => match form.validate() {
             Ok(_) => form,
@@ -71,28 +51,30 @@ pub async fn publish_newsletter(
         },
         Err(e) => return Ok(send_flash_message_and_redirect(e, "/admin/newsletter")),
     };
+    let FormData {
+        title,
+        text_content,
+        html_content,
+        idempotency_key,
+    } = form.0;
+    let idempotency_key: IdempotencyKey = idempotency_key.try_into().map_err(e400)?;
     let user_id = user_id.into_inner();
-    let username = get_username(*user_id, &pool)
+    if let Some(saved_response) = get_saved_response(&pool, &idempotency_key, *user_id)
         .await
-        .map_err(PublishError::AuthError)?;
-    tracing::Span::current().record("username", &tracing::field::display(&username));
+        .map_err(e500)?
+    {
+        FlashMessage::info("The newsletter issue has been published!").send();
+        return Ok(saved_response);
+    }
 
-    let subscribers = get_confirmed_subscribers(&pool).await?;
+    let subscribers = get_confirmed_subscribers(&pool).await.map_err(e500)?;
     for subscriber in subscribers {
         match subscriber {
-            Ok(subscriber) => {
-                email_client
-                    .send_email(
-                        &subscriber.email,
-                        &form.0.title,
-                        &form.0.html_content,
-                        &form.0.text_content,
-                    )
-                    .await
-                    .with_context(|| {
-                        format!("Failed to send newsletter issue to {}", subscriber.email)
-                    })?;
-            }
+            Ok(subscriber) => email_client
+                .send_email(&subscriber.email, &title, &html_content, &text_content)
+                .await
+                .with_context(|| format!("Failed to send newsletter issue to {}", subscriber.email))
+                .map_err(e500)?,
             Err(error) => {
                 tracing::warn!(
                 error.cause_chain = ?error,
@@ -103,7 +85,11 @@ pub async fn publish_newsletter(
         }
     }
     FlashMessage::info("The newsletter issue has been published!").send();
-    Ok(see_other("/admin/newsletter"))
+    let response = see_other("/admin/newsletter");
+    let response = save_response(&pool, &idempotency_key, *user_id, response)
+        .await
+        .map_err(e500)?;
+    Ok(response)
 }
 
 struct ConfirmedSubscriber {
