@@ -1,6 +1,9 @@
 use argon2::password_hash::SaltString;
 use argon2::PasswordHasher;
 use argon2::{Algorithm, Argon2, Params, Version};
+use fake::faker::internet::en::SafeEmail;
+use fake::faker::name::en::Name;
+use fake::Fake;
 use once_cell::sync::Lazy;
 use reqwest::{Response, Url};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
@@ -110,7 +113,13 @@ impl TestApp {
     }
 
     pub async fn create_unconfirmed_subscriber(&self) -> ConfirmationLinks {
-        let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+        let name: String = Name().fake();
+        let email: String = SafeEmail().fake();
+        let body = serde_urlencoded::to_string(&serde_json::json!({
+            "name": name,
+            "email": email
+        }))
+        .unwrap();
         let _mock_guard = Mock::given(path("/email"))
             .and(method("POST"))
             .respond_with(ResponseTemplate::new(200))

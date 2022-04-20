@@ -1,7 +1,7 @@
 use crate::authentication::UserId;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
-use crate::idempotency::{get_saved_response, save_response, IdempotencyKey};
+use crate::idempotency::{save_response, try_processing, IdempotencyKey, NextAction};
 use crate::util::{e500, see_other, NonEmptyString};
 use actix_web::{post, web, HttpResponse};
 use actix_web_flash_messages::FlashMessage;
@@ -35,13 +35,16 @@ pub async fn publish_newsletter(
         }
     };
     let user_id = user_id.into_inner();
-    if let Some(saved_response) = get_saved_response(&pool, &form.0.idempotency_key, *user_id)
+    let transaction = match try_processing(&pool, &form.0.idempotency_key, *user_id)
         .await
         .map_err(e500)?
     {
-        FlashMessage::info("The newsletter issue has been published!").send();
-        return Ok(saved_response);
-    }
+        NextAction::StartProcessing(t) => t,
+        NextAction::ReturnSavedResponse(saved_response) => {
+            success_message().send();
+            return Ok(saved_response);
+        }
+    };
 
     let subscribers = get_confirmed_subscribers(&pool).await.map_err(e500)?;
     for subscriber in subscribers {
@@ -65,9 +68,9 @@ pub async fn publish_newsletter(
             }
         }
     }
-    FlashMessage::info("The newsletter issue has been published!").send();
+    success_message().send();
     let response = see_other("/admin/newsletter");
-    let response = save_response(&pool, &form.0.idempotency_key, *user_id, response)
+    let response = save_response(transaction, &form.0.idempotency_key, *user_id, response)
         .await
         .map_err(e500)?;
     Ok(response)
@@ -102,4 +105,8 @@ async fn get_confirmed_subscribers(
 fn send_flash_message_and_redirect(error: impl ToString, location: &str) -> HttpResponse {
     FlashMessage::error(error.to_string()).send();
     see_other(location)
+}
+
+fn success_message() -> FlashMessage {
+    FlashMessage::info("The newsletter issue has been published!")
 }
