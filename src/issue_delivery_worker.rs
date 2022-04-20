@@ -2,6 +2,8 @@ use crate::configuration::Settings;
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::startup::get_connection_pool;
+use crate::util::error_chain_fmt;
+use anyhow::Context;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::time::Duration;
 use tracing::{field::display, Span};
@@ -14,22 +16,40 @@ pub enum ExecutionOutcome {
     EmptyQueue,
 }
 
+#[derive(thiserror::Error)]
+pub enum ExecutionError {
+    #[error("{0}")]
+    Transient(#[source] anyhow::Error),
+    #[error("{0}")]
+    Fatal(#[source] anyhow::Error),
+}
+
+impl std::fmt::Debug for ExecutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
+    }
+}
+
 #[tracing::instrument(
     skip_all,
     fields(
         newsletter_issue_id=tracing::field::Empty,
         subscriber_email=tracing::field::Empty
     ),
-    err
+    err(Debug)
 )]
 pub async fn try_execute_task(
     pool: &PgPool,
     email_client: &EmailClient,
-) -> Result<ExecutionOutcome, anyhow::Error> {
-    let task = dequeue_task(pool).await?;
+) -> Result<ExecutionOutcome, ExecutionError> {
+    let task = dequeue_task(pool)
+        .await
+        .context("Failed to dequeue task.")
+        .map_err(ExecutionError::Transient)?;
     if task.is_none() {
         return Ok(ExecutionOutcome::EmptyQueue);
     }
+    // we already handled the case when task is None by early return, so it's okay to unwrap.
     let (transaction, issue_id, email) = task.unwrap();
     Span::current()
         .record("newsletter_issue_id", &display(issue_id))
@@ -37,7 +57,10 @@ pub async fn try_execute_task(
 
     match SubscriberEmail::parse(email.clone()) {
         Ok(email) => {
-            let issue = get_issue(pool, issue_id).await?;
+            let issue = get_issue(pool, issue_id)
+                .await
+                .context("Failed to retrieve issue from database.")
+                .map_err(ExecutionError::Transient)?;
             if let Err(e) = email_client
                 .send_email(
                     &email,
@@ -52,17 +75,35 @@ pub async fn try_execute_task(
                     error.message = %e,
                     "Failed to deliver issue to a confirmed subscriber. Skipping.",
                 );
+
+                return Err(ExecutionError::Transient(
+                    anyhow::anyhow!(e).context("Failed to send email."),
+                ));
             }
         }
         Err(e) => {
             tracing::error!(
                 error.cause_chain = ?e,
                 error.message = %e,
-                "Skipping a confirmed subscriber. Their stored contact details are invalid",
+                "Skipping a confirmed subscriber. Their stored contact details are invalid.",
             );
+
+            delete_task(transaction, issue_id, &email)
+                .await
+                .context("Failed to delete task.")
+                .map_err(ExecutionError::Transient)?;
+
+            tracing::info!("Deleted the task with invalid contact details from queue.");
+
+            return Err(ExecutionError::Fatal(
+                anyhow::anyhow!(e).context("Invalid contact details."),
+            ));
         }
     }
-    delete_task(transaction, issue_id, &email).await?;
+    delete_task(transaction, issue_id, &email)
+        .await
+        .context("Failed to delete task.")
+        .map_err(ExecutionError::Transient)?;
     Ok(ExecutionOutcome::TaskCompleted)
 }
 
@@ -144,10 +185,11 @@ async fn worker_loop(pool: PgPool, email_client: EmailClient) -> Result<(), anyh
             Ok(ExecutionOutcome::EmptyQueue) => {
                 tokio::time::sleep(Duration::from_secs(10)).await;
             }
-            Err(_) => {
+            Ok(ExecutionOutcome::TaskCompleted) => {}
+            Err(ExecutionError::Transient(_)) => {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
-            Ok(ExecutionOutcome::TaskCompleted) => {}
+            Err(ExecutionError::Fatal(_)) => {}
         }
     }
 }
